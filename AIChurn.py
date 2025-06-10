@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import joblib
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
@@ -55,7 +56,7 @@ def init_connection():
     try:
         # Replace with your actual MongoDB connection string
         client = MongoClient(os.getenv("MONGO_URI"))
-        db = client.telecom
+        db = client["customer_db"]
         return db
     except Exception as e:
         st.error(f"Failed to connect to MongoDB: {e}")
@@ -67,50 +68,80 @@ db = init_connection()
 @st.cache_data
 def load_sample_data():
     try:
-        # Sample customer data
-        customers = pd.DataFrame({
-            'customer_id': [f'CUST{1000 + i}' for i in range(50)],
-            'name': [f'Customer {i}' for i in range(50)],
-            'age': np.random.randint(18, 70, 50),
-            'gender': np.random.choice(['Male', 'Female'], 50),
-            'location': np.random.choice(['Urban', 'Suburban', 'Rural'], 50),
-            'tenure': np.random.randint(1, 60, 50),
-            'plan_type': np.random.choice(['Premium', 'Standard', 'Basic'], 50),
-            'monthly_charge': np.random.uniform(20, 200, 50).round(2),
-            'total_charges': np.random.uniform(100, 5000, 50).round(2),
-            'last_recharge': [(datetime.now() - timedelta(days=np.random.randint(1, 60))) for _ in range(50)],
-            'avg_call_duration': np.random.uniform(5, 120, 50).round(2),
-            'avg_data_usage': np.random.uniform(1, 20, 50).round(2),
-            'complaints_last_month': np.random.randint(0, 5, 50),
-            'support_tickets': np.random.randint(0, 10, 50),
-            'churn_risk': np.random.uniform(0, 1, 50).round(2),
-            'last_interaction': [(datetime.now() - timedelta(days=np.random.randint(1, 30))) for _ in range(50)]
-        })
-        
-        # Generate some churn reasons
-        reasons = [
-            "Price sensitivity", "Network issues", "Customer service", 
-            "Competitor offer", "Relocation", "Dissatisfaction", 
-            "Billing issues", "Data speed", "Coverage problems"
+        # Connect to MongoDB
+        client = MongoClient(os.getenv("MONGO_URI"))
+        db = client["customer_db"]
+        collection = db["churn_data"]
+
+        # Fetch all documents from the collection
+        mongo_data = list(collection.find({}))
+
+        if not mongo_data:
+            st.warning("No data found in MongoDB collection.")
+            return pd.DataFrame()
+
+        # Convert to DataFrame
+        customers = pd.DataFrame(mongo_data)
+
+        # Drop MongoDB _id field if present
+        if "_id" in customers.columns:
+            customers.drop("_id", axis=1, inplace=True)
+
+        # Define expected fields
+        expected_columns = [
+            'customer_id', 'name', 'age', 'gender', 'senior_citizen', 'partner', 'dependents',
+            'tenure_months', 'tenure', 'phone_service', 'multiple_lines', 'internet_service',
+            'online_security', 'online_backup', 'device_protection', 'tech_support',
+            'streaming_tv', 'streaming_movies', 'streaming_music', 'unlimited_data',
+            'contract', 'paperless_billing', 'payment_method', 'monthly_charge', 'total_charges',
+            'cltv', 'cltv_status', 'quarter', 'referred_a_friend', 'number_of_referrals',
+            'offer', 'avg_monthly_long_distance_charges', 'internet_type',
+            'avg_monthly_gb_download', 'total_refunds', 'total_extra_data_charges',
+            'total_long_distance_charges', 'total_revenue', 'satisfaction_score',
+            'location', 'plan_type', 'last_recharge', 'avg_call_duration', 'avg_data_usage',
+            'churn_risk', 'complaints_last_month', 'support_tickets', 'last_interaction',
+            'churn_reason'
         ]
-        customers['churn_reason'] = np.random.choice(reasons, 50)
-        
+
+        # Fill missing columns with default values
+        for col in expected_columns:
+            if col not in customers.columns:
+                if col in ['monthly_charge', 'total_charges', 'avg_monthly_long_distance_charges',
+                           'avg_monthly_gb_download', 'total_refunds', 'total_extra_data_charges',
+                           'total_long_distance_charges', 'total_revenue', 'avg_call_duration',
+                           'avg_data_usage', 'churn_risk']:
+                    customers[col] = 0.0
+                elif col in ['age', 'tenure_months', 'tenure', 'number_of_referrals',
+                             'cltv', 'satisfaction_score', 'complaints_last_month', 'support_tickets']:
+                    customers[col] = 0
+                elif col in ['last_recharge', 'last_interaction']:
+                    customers[col] = datetime.now()
+                elif col == 'churn_reason':
+                    customers[col] = "Unknown"
+                else:
+                    customers[col] = "Unknown"
+
         return customers
+
     except Exception as e:
-        st.error(f"Error loading sample data: {e}")
+        st.error(f"Error loading data from MongoDB: {str(e)}")
         return pd.DataFrame()
 
 # Load model (replace with actual model loading)
 @st.cache_resource
 def load_churn_model():
     try:
-        # In a real scenario, you would load your trained BiLSTM/Transformer model here
-        # This is a placeholder for demonstration
-        class DummyModel:
-            def predict(self, data):
-                return np.random.uniform(0, 1, len(data)).round(2)
-        
-        return DummyModel()
+        model = joblib.load('model1.pkl')
+        return model
+    except Exception as e:
+        st.error(f"Error loading model: {e}")
+        return None
+
+@st.cache_resource
+def load_churn_scaler():
+    try:
+        model = joblib.load('num_scaler21.pkl')
+        return model
     except Exception as e:
         st.error(f"Error loading model: {e}")
         return None
@@ -124,6 +155,85 @@ if 'show_details' not in st.session_state:
 # Load data and model
 customers_df = load_sample_data()
 model = load_churn_model()
+scaler = load_churn_scaler()
+def predict_churn(customer_data):
+    """
+    Predict churn risk for a customer using the trained model and scaler
+    """
+    try:
+        # Load the model and scaler
+        model = joblib.load('model1.pkl')
+        scaler = joblib.load('num_scaler21.pkl')
+        
+        # Get the exact feature names the scaler was trained on
+        if hasattr(scaler, 'feature_names_in_'):
+            scaler_features = list(scaler.feature_names_in_)
+        else:
+            # Fallback if scaler doesn't have feature names
+            scaler_features = [
+                'Tenure Months', 'Monthly Charges', 'Total Charges', 'CLTV',
+                'Number of Referrals', 'Avg Monthly Long Distance Charges',
+                'Avg Monthly GB Download', 'Total Refunds', 
+                'Total Extra Data Charges', 'Total Long Distance Charges',
+                'Total Revenue', 'Satisfaction Score'
+            ]
+        
+        # Get the exact feature names the model expects
+        model_features = [
+            'Zip Code', 'Gender', 'Senior Citizen', 'Partner', 'Dependents',
+            'Tenure Months', 'Phone Service', 'Multiple Lines', 'Internet Service',
+            'Online Security', 'Online Backup', 'Device Protection', 'Tech Support',
+            'Streaming TV', 'Streaming Movies', 'Contract', 'Paperless Billing',
+            'Payment Method', 'Monthly Charges', 'Total Charges', 'CLTV', 'Quarter',
+            'Referred a Friend', 'Number of Referrals', 'Tenure in Months', 'Offer',
+            'Phone Service_services', 'Avg Monthly Long Distance Charges',
+            'Multiple Lines_services', 'Internet Service_services', 'Internet Type',
+            'Avg Monthly GB Download', 'Online Security_services',
+            'Online Backup_services', 'Device Protection Plan',
+            'Premium Tech Support', 'Streaming TV_services',
+            'Streaming Movies_services', 'Streaming Music', 'Unlimited Data',
+            'Contract_services', 'Paperless Billing_services',
+            'Payment Method_services', 'Monthly Charge', 'Total Charges_services',
+            'Total Refunds', 'Total Extra Data Charges',
+            'Total Long Distance Charges', 'Total Revenue', 'Quarter_status',
+            'Satisfaction Score', 'CLTV_status'
+        ]
+        
+        # Create DataFrame with all expected features in correct order
+        input_df = pd.DataFrame(columns=model_features)
+        
+        # Fill in provided values, use safe defaults for missing ones
+        for feature in model_features:
+            if feature in customer_data:
+                input_df[feature] = [customer_data[feature]]
+            else:
+                # Assign appropriate defaults based on feature type
+                if feature in scaler_features or any(x in feature.lower() for x in ['charge', 'cltv', 'revenue', 'score']):
+                    input_df[feature] = 0.0  # Numeric default
+                else:
+                    input_df[feature] = 'Missing'  # Categorical default
+        
+        # Scale only the numeric features that were in the training data
+        numeric_cols = [col for col in scaler_features if col in input_df.columns]
+        input_df[numeric_cols] = scaler.transform(input_df[numeric_cols])
+        
+        # Convert categoricals to numerical codes
+        for col in input_df.select_dtypes(include=['object']).columns:
+            input_df[col] = input_df[col].astype('category').cat.codes
+            
+        # Ensure final feature order matches model expectations
+        input_df = input_df[model_features]
+        
+        # Convert to numpy array and predict
+        input_np = input_df.values.astype(np.float32)
+        prediction_proba = model.predict_proba(input_np)[:, 1]
+        prediction = (prediction_proba >= 0.5).astype(int)
+        
+        return float(prediction_proba[0]), int(prediction[0])
+        
+    except Exception as e:
+        st.error(f"Error making prediction: {e}")
+        return None, None
 
 # Sidebar
 with st.sidebar:
@@ -561,7 +671,7 @@ elif page == "Model Management":
     }
     </style>
     """, unsafe_allow_html=True)
-    tab1, tab2, tab3 = st.tabs(["Model Performance", "Retrain Model", "Data Quality"])
+    tab1, tab2, tab3, tab4 = st.tabs(["Model Performance", "Retrain Model", "Data Quality", "Predict Churn"])
     
     with tab1:
         st.subheader("Current Model Performance")
@@ -724,6 +834,232 @@ elif page == "Model Management":
                           title=f'Distribution of {feature}',
                           color_discrete_sequence=['#1f77b4'])
         st.plotly_chart(fig, use_container_width=True)
+    with tab4:
+        st.subheader("Customer Information")
+        
+        # Personal Information
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            customer_id = st.text_input("Customer ID", "CUST1001")
+            name = st.text_input("Full Name", "John Doe")
+            gender = st.selectbox("Gender", ["Male", "Female", "Other"])
+            senior_citizen = st.selectbox("Senior Citizen", ["Yes", "No"])
+        with col2:
+            partner = st.selectbox("Partner", ["Yes", "No"])
+            dependents = st.selectbox("Dependents", ["Yes", "No"])
+            zip_code = st.text_input("Zip Code", "10001")
+        with col3:
+            tenure_months = st.number_input("Tenure (Months)", min_value=0, max_value=120, value=12)
+            satisfaction_score = st.slider("Satisfaction Score (1-5)", 1, 5, 3)
+        
+        st.subheader("Service Details")
+        
+        # Service Information
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            phone_service = st.selectbox("Phone Service", ["Yes", "No"])
+            multiple_lines = st.selectbox("Multiple Lines", ["No", "Yes", "No phone service"])
+            internet_service = st.selectbox("Internet Service", ["DSL", "Fiber optic", "No"])
+        with col2:
+            online_security = st.selectbox("Online Security", ["No", "Yes", "No internet service"])
+            online_backup = st.selectbox("Online Backup", ["No", "Yes", "No internet service"])
+            device_protection = st.selectbox("Device Protection", ["No", "Yes", "No internet service"])
+        with col3:
+            tech_support = st.selectbox("Tech Support", ["No", "Yes", "No internet service"])
+            streaming_tv = st.selectbox("Streaming TV", ["No", "Yes", "No internet service"])
+            streaming_movies = st.selectbox("Streaming Movies", ["No", "Yes", "No internet service"])
+        
+        st.subheader("Contract & Billing")
+        
+        # Contract Information
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            contract = st.selectbox("Contract", ["Month-to-month", "One year", "Two year"])
+            paperless_billing = st.selectbox("Paperless Billing", ["Yes", "No"])
+        with col2:
+            payment_method = st.selectbox("Payment Method", [
+                "Electronic check", "Mailed check", 
+                "Bank transfer (automatic)", "Credit card (automatic)"
+            ])
+            referred_a_friend = st.selectbox("Referred a Friend", ["Yes", "No"])
+        with col3:
+            num_referrals = st.number_input("Number of Referrals", min_value=0, value=0)
+            offer = st.selectbox("Current Offer", ["None", "Offer A", "Offer B", "Offer C", "Offer D"])
+        
+        st.subheader("Usage & Financial Metrics")
+        
+        # Usage and Financials
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            monthly_charges = st.number_input("Monthly Charges ($)", min_value=0.0, value=70.0)
+            total_charges = st.number_input("Total Charges ($)", min_value=0.0, value=840.0)
+        with col2:
+            avg_monthly_gb = st.number_input("Avg Monthly GB Download", min_value=0.0, value=50.0)
+            avg_monthly_long_dist = st.number_input("Avg Long Distance Charges ($)", min_value=0.0, value=10.0)
+        with col3:
+            cltv = st.number_input("Customer Lifetime Value", min_value=0, value=2000)
+            total_revenue = st.number_input("Total Revenue ($)", min_value=0.0, value=1000.0)
+        
+        # Additional fields (collapsed by default)
+        with st.expander("Advanced Features"):
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                internet_type = st.selectbox("Internet Type", ["DSL", "Fiber optic", "None"])
+                unlimited_data = st.selectbox("Unlimited Data", ["Yes", "No"])
+            with col2:
+                streaming_music = st.selectbox("Streaming Music", ["Yes", "No"])
+                quarter = st.selectbox("Quarter", ["Q1", "Q2", "Q3", "Q4"])
+            with col3:
+                quarter_status = st.selectbox("Quarter Status", ["Active", "Inactive"])
+                cltv_status = st.selectbox("CLTV Status", ["High", "Medium", "Low"])
+        
+        submitted = st.button("Predict Churn Risk")
+        
+        if submitted:
+            yes_no_map = {"Yes": 1, "No": 0}
+            gender_map = {"Male": 0, "Female": 1, "Other": 2}
+            internet_service_map = {"DSL": 0, "Fiber optic": 1, "No": 2}
+            multi_lines_map = {"No": 0, "Yes": 1, "No phone service": 2}
+            internet_feature_map = {"No": 0, "Yes": 1, "No internet service": 2}
+            contract_map = {"Month-to-month": 0, "One year": 1, "Two year": 2}
+            payment_method_map = {
+                "Electronic check": 0,
+                "Mailed check": 1,
+                "Bank transfer (automatic)": 2,
+                "Credit card (automatic)": 3
+            }
+            offer_map = {"None": 0, "Offer A": 1, "Offer B": 2, "Offer C": 3, "Offer D": 4}
+            internet_type_map = {"DSL": 0, "Fiber optic": 1, "None": 2}
+            quarter_map = {"Q1": 1, "Q2": 2, "Q3": 3, "Q4": 4}
+            quarter_status_map = {"Active": 1, "Inactive": 0}
+            cltv_status_map = {"Low": 0, "Medium": 1, "High": 2}
+
+            # Prepare customer data with proper types
+            customer_data = {
+                'Zip Code': str(zip_code),
+                'Gender': gender_map[gender],
+                'Senior Citizen': yes_no_map[senior_citizen],
+                'Partner': yes_no_map[partner],
+                'Dependents': yes_no_map[dependents],
+                'Tenure Months': int(tenure_months),
+                'Phone Service': yes_no_map[phone_service],
+                'Multiple Lines': multi_lines_map[multiple_lines],
+                'Internet Service': internet_service_map[internet_service],
+                'Online Security': internet_feature_map[online_security],
+                'Online Backup': internet_feature_map[online_backup],
+                'Device Protection': internet_feature_map[device_protection],
+                'Tech Support': internet_feature_map[tech_support],
+                'Streaming TV': internet_feature_map[streaming_tv],
+                'Streaming Movies': internet_feature_map[streaming_movies],
+                'Contract': contract_map[contract],
+                'Paperless Billing': yes_no_map[paperless_billing],
+                'Payment Method': payment_method_map[payment_method],
+                'Monthly Charges': float(monthly_charges),
+                'Total Charges': float(total_charges),
+                'CLTV': int(cltv),
+                'Quarter': quarter_map[quarter],
+                'Referred a Friend': yes_no_map[referred_a_friend],
+                'Number of Referrals': int(num_referrals),
+                'Tenure in Months': int(tenure_months),
+                'Offer': offer_map[offer],
+                'Internet Type': internet_type_map[internet_type],
+                'Avg Monthly GB Download': float(avg_monthly_gb),
+                'Avg Monthly Long Distance Charges': float(avg_monthly_long_dist),
+                'Streaming Music': yes_no_map[streaming_music],
+                'Unlimited Data': yes_no_map[unlimited_data],
+                'Total Revenue': float(total_revenue),
+                'Quarter_status': quarter_status_map[quarter_status],
+                'Satisfaction Score': int(satisfaction_score),
+                'CLTV_status': cltv_status_map[cltv_status]
+            }
+            
+            with st.spinner("Analyzing customer data..."):
+                churn_prob, churn_pred = predict_churn(customer_data)
+                
+                if churn_prob is not None:
+                    st.markdown("---")
+                    st.subheader("Prediction Results")
+                    
+                    # Create columns for layout
+                    col1, col2 = st.columns([2, 1])
+                    
+                    with col1:
+                        # Gauge chart
+                        fig = go.Figure(go.Indicator(
+                            mode="gauge+number",
+                            value=churn_prob,
+                            domain={'x': [0, 1], 'y': [0, 1]},
+                            title={'text': "Churn Risk Score"},
+                            gauge={
+                                'axis': {'range': [0, 1]},
+                                'bar': {'color': "darkblue"},
+                                'steps': [
+                                    {'range': [0, 0.3], 'color': "green"},
+                                    {'range': [0.3, 0.7], 'color': "orange"},
+                                    {'range': [0.7, 1], 'color': "red"}],
+                                'threshold': {
+                                    'line': {'color': "black", 'width': 4},
+                                    'thickness': 0.75,
+                                    'value': churn_prob}
+                            }
+                        ))
+                        st.plotly_chart(fig, use_container_width=True)
+                    
+                    with col2:
+                        # Prediction summary
+                        st.metric("Prediction", 
+                                 "Will Churn" if churn_pred == 1 else "Will Stay",
+                                 delta=f"{churn_prob:.1%} confidence")
+                        
+                        # Interpretation
+                        if churn_prob < 0.3:
+                            st.success("✅ Low churn risk")
+                            st.markdown("This customer is likely to stay with us.")
+                        elif churn_prob < 0.7:
+                            st.warning("⚠️ Medium churn risk")
+                            st.markdown("This customer may need attention.")
+                        else:
+                            st.error("🚨 High churn risk")
+                            st.markdown("Immediate action recommended!")
+                    
+                    # Display feature importance (if available)
+                    try:
+                        if hasattr(model, 'feature_importances_'):
+                            st.subheader("Top Influential Factors")
+                            feat_imp = pd.DataFrame({
+                                'Feature': features,
+                                'Importance': model.feature_importances_
+                            }).sort_values('Importance', ascending=False).head(10)
+                            
+                            fig = px.bar(feat_imp, x='Importance', y='Feature', 
+                                        orientation='h', title='Feature Importance')
+                            st.plotly_chart(fig, use_container_width=True)
+                    except Exception:
+                        pass
+                    
+                    # Save prediction button
+                    if st.button("Save Prediction to Database"):
+                        try:
+                            # Connect to MongoDB
+                            client = MongoClient(os.getenv("MONGO_URI"))
+                            db = client["customer_db"]
+                            collection = db["churn_predictions"]
+                            
+                            # Prepare document
+                            prediction_doc = {
+                                "customer_id": customer_id,
+                                "name": name,
+                                "prediction_date": datetime.now(),
+                                "churn_probability": churn_prob,
+                                "churn_prediction": bool(churn_pred),
+                                "customer_data": customer_data
+                            }
+                            
+                            # Insert prediction
+                            collection.insert_one(prediction_doc)
+                            st.success("Prediction saved successfully!")
+                        except Exception as e:
+                            st.error(f"Error saving prediction: {e}")
 
 elif page == "Retention Actions":
     st.title("🛡️ Retention Actions")
