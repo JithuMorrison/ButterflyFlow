@@ -148,10 +148,47 @@ with st.sidebar:
     
     high_risk_df = filtered_df[filtered_df['churn_risk'] >= risk_threshold]
     
-    st.markdown("---")
-    st.metric("High Risk Customers", len(high_risk_df))
-    st.metric("Total Customers", len(filtered_df))
-    st.markdown("---")
+    st.markdown("""
+    <style>
+    .value-box {
+        border-radius: 8px;
+        padding: 20px;
+        margin-bottom: 20px;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    .value-box.high-risk {
+        background: linear-gradient(135deg, #ff758c, #ff7eb3);
+        color: white;
+    }
+    .value-box.total {
+        background: linear-gradient(135deg, #76b852, #8DC26F);
+        color: white;
+    }
+    .value-box h3 {
+        margin-top: 0;
+        font-size: 1.2rem;
+    }
+    .value-box .value {
+        font-size: 2.5rem;
+        font-weight: bold;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+    st.markdown(f"""
+    <div class="value-box high-risk">
+        <h3>🚨 High Risk Customers</h3>
+        <div class="value">{len(high_risk_df)}</div>
+        <div>{len(high_risk_df)/len(filtered_df)*100:.1f}% of total</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown(f"""
+    <div class="value-box total">
+        <h3>👥 Total Customers</h3>
+        <div class="value">{len(filtered_df)}</div>
+    </div>
+    """, unsafe_allow_html=True)
     
     # Navigation
     st.subheader("Navigation")
@@ -166,6 +203,16 @@ if page == "Dashboard":
     """)
     
     # KPI cards
+    st.markdown("""
+    <style>
+    [data-testid="stMetricLabel"] p {
+        color: black !important;
+    }
+    [data-testid="stMetricValue"] {
+        color: black !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         st.metric("High Risk Customers", len(high_risk_df), delta=f"{len(high_risk_df)/len(filtered_df)*100:.1f}% of total")
@@ -331,6 +378,16 @@ elif page == "Customer Insights":
         st.markdown("---")
         
         # Customer details tabs
+        st.markdown("""
+        <style>
+        .stTabs [data-baseweb="tab-list"] button {
+            color: gray !important;
+        }
+        .stTabs [data-baseweb="tab-list"] button[aria-selected="true"] {
+            color: red !important;
+        }
+        </style>
+        """, unsafe_allow_html=True)
         tab1, tab2, tab3, tab4 = st.tabs(["Usage Patterns", "Support History", "Churn Analysis", "Retention Recommendations"])
         
         with tab1:
@@ -462,6 +519,22 @@ elif page == "Customer Insights":
             st.subheader("Action Plan")
             
             # Action plan form
+            st.markdown("""
+            <style>
+            div[data-testid="stForm"] .stSelectbox label {
+                color: black !important;
+            }
+            div[data-testid="stForm"] .stTextArea label {
+                color: black !important;
+            }
+            div[data-testid="stForm"] .stFormSubmitButton button {
+                color: white !important;
+            }
+            div[data-testid="stForm"] .stFormSubmitButton button:hover {
+                color: red !important;
+            }
+            </style>
+            """, unsafe_allow_html=True)
             with st.form("action_plan"):
                 selected_action = st.selectbox("Select action to implement", primary_recs)
                 action_owner = st.selectbox("Assign to", ["Retention Team", "Account Manager", "Customer Support"])
@@ -471,7 +544,6 @@ elif page == "Customer Insights":
                 submitted = st.form_submit_button("Create Action Plan")
                 if submitted:
                     st.success("Action plan created successfully!")
-                    # In a real app, you would save this to your database
     
     else:
         st.info("Select a customer from the Dashboard to view detailed insights")
@@ -479,12 +551,32 @@ elif page == "Customer Insights":
 elif page == "Model Management":
     st.title("🤖 Model Management")
     
+    st.markdown("""
+    <style>
+    .stTabs [data-baseweb="tab-list"] button {
+        color: gray !important;
+    }
+    .stTabs [data-baseweb="tab-list"] button[aria-selected="true"] {
+        color: red !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
     tab1, tab2, tab3 = st.tabs(["Model Performance", "Retrain Model", "Data Quality"])
     
     with tab1:
         st.subheader("Current Model Performance")
         
         # Mock performance metrics
+        st.markdown("""
+        <style>
+        [data-testid="stMetricLabel"] p {
+            color: black !important;
+        }
+        [data-testid="stMetricValue"] {
+            color: black !important;
+        }
+        </style>
+        """, unsafe_allow_html=True)
         col1, col2, col3, col4 = st.columns(4)
         with col1:
             st.metric("Accuracy", "0.89", "2% from last month")
@@ -535,6 +627,13 @@ elif page == "Model Management":
         
         # Data selection
         st.subheader("Training Data")
+        st.markdown("""
+        <style>
+        .stDateInput label {
+            color: black !important;
+        }
+        </style>
+        """, unsafe_allow_html=True)
         data_range = st.date_input("Select date range for training data", 
                                  [datetime.now() - timedelta(days=365), datetime.now()])
         
@@ -601,6 +700,13 @@ elif page == "Model Management":
         
         # Data distribution monitoring
         st.subheader("Feature Distributions")
+        st.markdown("""
+        <style>
+        .stSelectbox label {
+            color: black !important;
+        }
+        </style>
+        """, unsafe_allow_html=True)
         feature = st.selectbox("Select feature to monitor", 
                              ['Call duration', 'Data usage', 'Tenure', 'Monthly charge'])
         
@@ -622,6 +728,16 @@ elif page == "Model Management":
 elif page == "Retention Actions":
     st.title("🛡️ Retention Actions")
     
+    st.markdown("""
+    <style>
+    .stTabs [data-baseweb="tab-list"] button {
+        color: gray !important;
+    }
+    .stTabs [data-baseweb="tab-list"] button[aria-selected="true"] {
+        color: red !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
     tab1, tab2 = st.tabs(["Active Campaigns", "Action History"])
     
     with tab1:
@@ -684,6 +800,31 @@ elif page == "Retention Actions":
         # Create new campaign
         st.subheader("Launch New Campaign")
         with st.form("new_campaign"):
+            st.markdown("""
+            <style>
+            div[data-testid="stForm"] .stSelectbox label {
+                color: black !important;
+            }
+            div[data-testid="stForm"] .stTextArea label {
+                color: black !important;
+            }
+            div[data-testid="stForm"] .stTextInput label {
+                color: black !important;
+            }
+            div[data-testid="stForm"] .stDateInput label {
+                color: black !important;
+            }
+            div[data-testid="stForm"] .stNumberInput label {
+                color: black !important;
+            }
+            div[data-testid="stForm"] .stFormSubmitButton button {
+                color: white !important;
+            }
+            div[data-testid="stForm"] .stFormSubmitButton button:hover {
+                color: red !important;
+            }
+            </style>
+            """, unsafe_allow_html=True)
             name = st.text_input("Campaign Name")
             description = st.text_area("Description")
             
@@ -729,6 +870,17 @@ elif page == "Retention Actions":
         })
         
         # Filters
+        st.markdown("""
+        <style>
+        .stMultiSelect label {
+            color: black !important;
+        }
+
+        .stDateInput label {
+            color: black !important;
+        }
+        </style>
+        """, unsafe_allow_html=True)
         col1, col2, col3 = st.columns(3)
         with col1:
             result_filter = st.multiselect("Filter by result", actions['result'].unique(), default=actions['result'].unique())
