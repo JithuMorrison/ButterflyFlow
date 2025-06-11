@@ -17,6 +17,11 @@ from PIL import Image
 import base64
 from dotenv import load_dotenv
 import google.generativeai as genai
+from email.mime.text import MIMEText
+from google_auth_oauthlib.flow import InstalledAppFlow
+from googleapiclient.discovery import build
+from google.auth.transport.requests import Request
+import os.path
 
 load_dotenv()
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
@@ -445,6 +450,38 @@ def send_google_chat_alert(customers_df, filtered_df):
     else:
         return f"❌ Failed to send message: {response.status_code}, {response.text}"
 
+SCOPES = [os.getenv("SCOPE_URL")]
+
+def gmail_authenticate():
+    creds = None
+    # Use token.pickle to store the user's credentials
+    if os.path.exists(os.getenv("TOKEN")):
+        with open(os.getenv("TOKEN"), 'rb') as token:
+            creds = pickle.load(token)
+    # If credentials are not valid, let user log in
+    if not creds or not creds.valid:
+        if creds and creds.expired and creds.refresh_token:
+            creds.refresh(Request())
+        else:
+            flow = InstalledAppFlow.from_client_secrets_file(
+                os.getenv("JSON"), SCOPES)
+            creds = flow.run_local_server(port=8080)
+        # Save the credentials for the next run
+        with open(os.getenv("TOKEN"), 'wb') as token:
+            pickle.dump(creds, token)
+    return build('gmail', 'v1', credentials=creds)
+
+def send_gmail(to_email, subject, message_text):
+    service = gmail_authenticate()
+    message = MIMEText(message_text)
+    message['to'] = to_email
+    message['subject'] = subject
+    raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
+    body = {'raw': raw}
+    
+    send_message = service.users().messages().send(userId="me", body=body).execute()
+    return send_message
+
 # Sidebar
 with st.sidebar:
     st.image("Butterfly.png", width=200)  # Replace with your logo
@@ -652,6 +689,40 @@ if page == "Dashboard":
     if st.button("Alert!!"):
         ans = send_google_chat_alert(customers_df, filtered_df)
         st.write(ans)
+
+    
+    st.markdown("""
+    <style>
+    div[data-testid="stForm"] .stTextInput label {
+        color: black !important;
+    }
+    div[data-testid="stForm"] .stTextArea label {
+        color: black !important;
+    }
+    div[data-testid="stForm"] .stFormSubmitButton button {
+        color: white !important;
+    }
+    div[data-testid="stForm"] .stFormSubmitButton button:hover {
+        color: red !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    st.subheader("📧 Gmail Churn Alert Sender")
+
+    with st.form("email_form"):
+        to_email = st.text_input("Recipient Email")
+        subject = st.text_input("Email Subject", "⚠️ Churn Risk Alert")
+        body = st.text_area("Message Body", "5 VIP users are likely to churn. Please take action.")
+        submitted = st.form_submit_button("Send Email")
+
+        if submitted:
+            if not os.path.exists("credentials.json"):
+                st.error("❌ Missing credentials.json! Download it from your Google Cloud project.")
+            elif not to_email or not subject or not body:
+                st.warning("Please fill in all fields.")
+            else:
+                result = send_gmail(to_email, subject, body)
+                st.write("Email sent successfully!" if result else "Failed to send email.")
 
     if st.session_state.show_details and st.session_state.selected_customer is not None:
         selected_customer = pd.Series(st.session_state.selected_customer)
