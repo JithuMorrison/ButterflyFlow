@@ -284,14 +284,35 @@ def display_prediction_results(churn_prob, churn_pred, customer_data):
             
             # Interpretation
             if churn_prob < 0.3:
-                st.success("✅ Low churn risk")
-                st.markdown("This customer is likely to stay with us.")
+                st.markdown(
+                    """
+                    <div style="background-color:#d4edda; padding:15px; border-radius:10px; color:#155724;">
+                        ✅ <strong>Low churn risk</strong><br>
+                        This customer is likely to stay with us.
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
             elif churn_prob < 0.7:
-                st.warning("⚠️ Medium churn risk")
-                st.markdown("This customer may need attention.")
+                st.markdown(
+                    """
+                    <div style="background-color:#fff3cd; padding:15px; border-radius:10px; color:#856404;">
+                        ⚠️ <strong>Medium churn risk</strong><br>
+                        This customer may need attention.
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
             else:
-                st.error("🚨 High churn risk")
-                st.markdown("Immediate action recommended!")
+                st.markdown(
+                    """
+                    <div style="background-color:#f8d7da; padding:15px; border-radius:10px; color:#721c24;">
+                        🚨 <strong>High churn risk</strong><br>
+                        Immediate action recommended!
+                    </div>
+                    """,
+                    unsafe_allow_html=True
+                )
         
         # Display feature importance (if available)
         try:
@@ -858,7 +879,14 @@ elif page == "Customer Insights":
             st.plotly_chart(fig, use_container_width=True)
             
             st.subheader("Primary Churn Reason")
-            st.warning(f"**{customer['churn_reason']}**")
+            st.markdown(
+                f"""
+                <div style="background-color:#fff3cd; padding: 12px 16px; border-left: 5px solid #ffa502; border-radius: 6px; font-size: 16px;">
+                    <strong style="color: #664d03;">⚠️ {customer['churn_reason']}</strong>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
             
             # Similar customers who churned
             st.subheader("Similar Customers Who Churned")
@@ -1024,7 +1052,7 @@ elif page == "Model Management":
             col1, col2 = st.columns(2)
             with col1:
                 model_type = st.selectbox("Model Architecture", 
-                                         ["BiLSTM", "Transformer", "XGBoost", "Random Forest"])
+                                         ["BiLSTM", "Transformer", "Tabnet", "Random Forest"])
                 epochs = st.slider("Epochs", 1, 100, 20)
                 batch_size = st.selectbox("Batch Size", [32, 64, 128, 256])
             
@@ -1040,6 +1068,18 @@ elif page == "Model Management":
         .stDateInput label {
             color: black !important;
         }
+        .stTextInput label {
+            color: black !important;
+        }
+        .stNumberInput label {
+            color: black !important;
+        }
+        .stSlider label {
+            color: black !important;
+        }
+        .stSelectbox label {
+                color: black !important;
+            }
         </style>
         """, unsafe_allow_html=True)
         data_range = st.date_input("Select date range for training data", 
@@ -1136,9 +1176,11 @@ elif page == "Model Management":
         st.subheader("Customer Information")
         
         # Add a radio button to choose input method
-        input_method = st.radio("Select Input Method:", 
-                            ["Enter Manually", "Load from Database"],
-                            horizontal=True)
+        input_method = st.selectbox(
+            "Select Input Method",
+            ["Enter Manually", "Load from Database"],
+            index=0
+        )
         
         if input_method == "Load from Database":
             # Load sample data from MongoDB
