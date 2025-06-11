@@ -5,6 +5,7 @@ import joblib
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, timedelta
+import requests
 import json
 from pymongo import MongoClient
 import pickle
@@ -411,6 +412,39 @@ def ask_gemini(query, customers_df, filtered_df):
     except Exception as e:
         return f"❌ Error from Gemini: {e}"
 
+def generate_gemini(customers_df, filtered_df):
+    prompt = f"""
+    You are a data assistant. generate a text to alert user regarding upcoming problems based on data available.
+    Two DataFrames are provided: `customer_df` (full dataset) and `filtered_df` (filtered view).
+
+    analyse the data and generate a text to alert user regarding upcoming problems.
+    like there are 3 customers with high churn risk, 2 customers with medium churn risk and 1 customer with low churn risk. like that or less customers in premium plan like that refer all user details and make a detailed review text
+
+    Do not hallucinate data. Use only what’s available in the DataFrames.
+    Here are sample data:
+    customer_df:
+    {customers_df.to_markdown()}
+
+    filtered_df:
+    {filtered_df.head(10).to_markdown()}
+    """
+    try:
+        response = gemini_model.generate_content(prompt)
+        return response.text
+    except Exception as e:
+        return f"❌ Error from Gemini: {e}"
+
+def send_google_chat_alert(customers_df, filtered_df):
+    headers = {'Content-Type': 'application/json; charset=UTF-8'}
+    payload = {'text': generate_gemini(customers_df, filtered_df)}
+    
+    response = requests.post(os.getenv("CHAT_URL"), headers=headers, data=json.dumps(payload))
+    
+    if response.status_code == 200:
+        return "✅ Message sent successfully."
+    else:
+        return f"❌ Failed to send message: {response.status_code}, {response.text}"
+
 # Sidebar
 with st.sidebar:
     st.image("Butterfly.png", width=200)  # Replace with your logo
@@ -613,6 +647,11 @@ if page == "Dashboard":
                 answer = ask_gemini(query, customers_df, filtered_df)
                 st.markdown("### Gemini's Response:")
                 st.write(answer)
+
+    st.subheader("⚠️ Alert Detected - Send Workspace Alert")
+    if st.button("Alert!!"):
+        ans = send_google_chat_alert(customers_df, filtered_df)
+        st.write(ans)
 
     if st.session_state.show_details and st.session_state.selected_customer is not None:
         selected_customer = pd.Series(st.session_state.selected_customer)
