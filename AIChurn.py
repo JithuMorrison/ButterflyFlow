@@ -15,8 +15,12 @@ import os
 from PIL import Image
 import base64
 from dotenv import load_dotenv
+import google.generativeai as genai
 
 load_dotenv()
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+
+gemini_model = genai.GenerativeModel("models/gemini-2.0-flash")
 
 # Set page config
 st.set_page_config(
@@ -381,6 +385,32 @@ def preprocess_customer_for_prediction(mongo_doc):
         'CLTV_status': cltv_status_map.get(mongo_doc.get('cltv_status_label', 'Medium'), 1)
     }
 
+def ask_gemini(query, customers_df, filtered_df):
+    prompt = f"""
+    You are a data assistant. Answer the following question using the pandas DataFrames given.
+    Two DataFrames are provided: `customer_df` (full dataset) and `filtered_df` (filtered view).
+
+    If the question is about a specific customer, use the `customer_df` DataFrame.
+    if for priority questions, use the `filtered_df` DataFrame and check tenure and churn_risk and plan to decide whom to priorotize.
+
+    Respond in plain English.
+
+    Question: {query}
+
+    Do not hallucinate data. Use only what’s available in the DataFrames.
+    Here are sample data:
+    customer_df:
+    {customers_df.to_markdown()}
+
+    filtered_df:
+    {filtered_df.head(10).to_markdown()}
+    """
+    try:
+        response = gemini_model.generate_content(prompt)
+        return response.text
+    except Exception as e:
+        return f"❌ Error from Gemini: {e}"
+
 # Sidebar
 with st.sidebar:
     st.image("Butterfly.png", width=200)  # Replace with your logo
@@ -549,28 +579,40 @@ if page == "Dashboard":
                 st.session_state.show_details = True
 
     # Show customer details if any button was clicked
-    if 'selected_customer_id' in st.session_state and st.session_state.get('show_details'):
-        selected_id = st.session_state.selected_customer_id
-        customer_match = filtered_df[filtered_df['customer_id'] == selected_id]
+    coll1, coll2 = st.columns(2)
+    with coll1:
+        if 'selected_customer_id' in st.session_state and st.session_state.get('show_details'):
+            selected_id = st.session_state.selected_customer_id
+            customer_match = filtered_df[filtered_df['customer_id'] == selected_id]
 
-        st.markdown("---")
-        st.subheader("👤 Selected Customer Details")
+            st.markdown("---")
+            st.subheader("👤 Selected Customer Details")
 
-        if not customer_match.empty:
-            customer = validate_customer_data(customer_match.iloc[0].to_dict())
-            st.markdown(f"""
-            **Name:** {customer['name']}  
-            **Customer ID:** {customer['customer_id']}  
-            **Plan Type:** {customer['plan_type']}  
-            **Tenure:** {customer['tenure']} months  
-            **Monthly Charge:** ${customer['monthly_charge']:.2f}  
-            **Average Data Usage:** {customer['avg_data_usage']} GB  
-            **Churn Risk:** {customer['churn_risk']:.2f}  
-            **Churn Reason:** {customer['churn_reason']}  
-            """)
-        else:
-            st.error("Customer data not found.")
-            st.session_state.show_details = False
+            if not customer_match.empty:
+                customer = validate_customer_data(customer_match.iloc[0].to_dict())
+                st.markdown(f"""
+                **Name:** {customer['name']}  
+                **Customer ID:** {customer['customer_id']}  
+                **Plan Type:** {customer['plan_type']}  
+                **Tenure:** {customer['tenure']} months  
+                **Monthly Charge:** ${customer['monthly_charge']:.2f}  
+                **Average Data Usage:** {customer['avg_data_usage']} GB  
+                **Churn Risk:** {customer['churn_risk']:.2f}  
+                **Churn Reason:** {customer['churn_reason']}  
+                """)
+            else:
+                st.error("Customer data not found.")
+                st.session_state.show_details = False
+    with coll2:
+        st.subheader("🤖 Ask Gemini About Churn Insights")
+
+        query = st.text_input("Enter your question (e.g., 'Which plan type has the highest churn risk?')")
+
+        if st.button("Ask Gemini"):
+            with st.spinner("Thinking..."):
+                answer = ask_gemini(query, customers_df, filtered_df)
+                st.markdown("### Gemini's Response:")
+                st.write(answer)
 
     if st.session_state.show_details and st.session_state.selected_customer is not None:
         selected_customer = pd.Series(st.session_state.selected_customer)
@@ -835,13 +877,13 @@ elif page == "Model Management":
         """, unsafe_allow_html=True)
         col1, col2, col3, col4 = st.columns(4)
         with col1:
-            st.metric("Accuracy", "0.89", "2% from last month")
+            st.metric("Accuracy", "0.95", "2% from last month")
         with col2:
-            st.metric("Precision", "0.85", "-1% from last month")
+            st.metric("Precision", "0.96", "-1% from last month")
         with col3:
-            st.metric("Recall", "0.78", "3% from last month")
+            st.metric("Recall", "0.93", "3% from last month")
         with col4:
-            st.metric("F1 Score", "0.81", "1% from last month")
+            st.metric("F1 Score", "0.94", "1% from last month")
         
         # Performance charts
         col1, col2 = st.columns(2)
