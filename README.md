@@ -54,7 +54,6 @@ Whether it's billing dissatisfaction, poor network experience, or unresolved iss
 <img src="https://github.com/user-attachments/assets/7df600e5-5969-4d65-9004-6b978d5d1d2a" width="500"/>
 <img src="https://github.com/user-attachments/assets/1368ce85-f828-464c-a838-c18eb4a99121" width="500"/>
 
-<img src="https://github.com/user-attachments/assets/4bc32958-16c6-455e-95b8-61f8e2669dbd" width="500"/>
 
 <img src="https://github.com/user-attachments/assets/03e34b54-bb99-4ebd-a9da-f3fdd20f8beb" width="500"/>
 
